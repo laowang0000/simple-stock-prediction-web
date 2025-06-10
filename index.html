@@ -1,0 +1,165 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartStock</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://s3.tradingview.com/tv.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>SmartStock</h1>
+      <div class="theme-controls">
+        <button class="theme-btn" data-theme="light">Light</button>
+        <button class="theme-btn" data-theme="dark">Dark</button>
+        <button class="theme-btn" data-theme="khaki">Khaki</button>
+        <button class="theme-btn" data-theme="green">Green</button>
+        <button class="theme-btn" data-theme="pink">Pink</button>
+      </div>
+      <div class="search-box">
+        <input
+          type="text"
+          id="stockSearch"
+          placeholder="Enter stock symbol (e.g., AAPL)"
+        />
+        <button id="searchBtn">Search</button>
+      </div>
+
+      <section class="top-stocks-section">
+        <h3>Top 10 Stocks</h3>
+        <div class="top-stocks-grid">
+          <div class="stock-header">
+            <span>Symbol</span>
+            <span>Price</span>
+            <span>Change</span>
+            <span>Volume</span>
+          </div>
+          <div id="topStocksList" class="stock-list">
+            <!-- Stocks will be populated by JavaScript -->
+          </div>
+        </div>
+      </section>
+    </header>
+
+    <main>
+      <section class="chart-section">
+        <div class="draw-controls">
+          <button onclick="startDrawing('line')">Draw Trend Line</button>
+          <button onclick="startDrawing('point')">Mark Point</button>
+          <button onclick="clearAnnotations()">Clear Annotations</button>
+          <select id="pointType" onchange="updatePointType()">
+            <option value="buy">Buy Signal</option>
+            <option value="sell">Sell Signal</option>
+            <option value="note">Note</option>
+          </select>
+          <input type="text" id="pointNote" placeholder="Optional note" style="display: none;" />
+        </div>
+        <div id="tradingview_widget"></div>
+      </section>
+
+      <section class="control-panel">
+        <div class="panel-item">
+          <h3>Technical Analysis</h3>
+          <div class="toggle-controls">
+            <label><input type="checkbox" id="rsiToggle" checked /> RSI</label>
+            <label><input type="checkbox" id="macdToggle" checked /> MACD</label>
+            <label><input type="checkbox" id="volumeToggle" checked /> Volume</label>
+          </div>
+          <div class="trend-info">
+            <p>Technical indicators help analyze market trends and potential price movements.</p>
+            <p>RSI indicates overbought/oversold conditions.</p>
+            <p>MACD helps identify trend changes and momentum.</p>
+          </div>
+        </div>
+
+        <div class="panel-item">
+          <h3>Trend Analysis</h3>
+          <div id="predictionResult" class="prediction-result">
+            <p>Enter a stock symbol to see the trend analysis.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="stock-info-section">
+        <h3>Stock Information</h3>
+        <div class="stock-info-grid">
+          <div class="info-item">
+            <span class="info-label">Open:</span>
+            <span class="info-value" id="stockOpen">203.00</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">High:</span>
+            <span class="info-value" id="stockHigh">205.70</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Low:</span>
+            <span class="info-value" id="stockLow">202.05</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Mkt Cap:</span>
+            <span class="info-value" id="stockMktCap">3.16T</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">P/E Ratio:</span>
+            <span class="info-value" id="stockPERatio">32.97</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Div Yield:</span>
+            <span class="info-value" id="stockDivYield">0.49%</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">52W High:</span>
+            <span class="info-value" id="stock52WHigh">260.09</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">52W Low:</span>
+            <span class="info-value" id="stock52WLow">169.21</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
